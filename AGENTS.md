@@ -11,7 +11,7 @@
 
 | Lab | 主题 | 状态 |
 |---|---|---|
-| 1 | 任务书（`Lab Material/Lab1/Opening Thesis Proposal Assignment.md`，模板：项目概述 / 迁移分析 / ≥2 项网络功能 / 预期成果） | 材料已有 |
+| 1 | 任务书（模板 `Lab Material/Lab1/Opening Thesis Proposal Assignment.md`；成稿 `docs/Lab1_开题任务书.md`，规划网络功能：云端排行榜、双人联机对战） | 初稿完成（用户需填姓名/分工后提交） |
 | 2 | 迁移：空壳 → 资源 → SurfaceView 游戏循环 → 触屏与逻辑 | 材料已有 |
 | 3 | 难度选择页、Intent 跳转、MediaPlayer(BGM)/SoundPool(音效)、Handler、MVC | 材料已有 |
 | 4 | 排行榜与本地存储 | 待更新 |
@@ -26,6 +26,9 @@
 ```
 AircraftWar/                      # 根仓库（git init 于此）
 ├── AGENTS.md
+├── .gitignore                    # 忽略 Archive/、Lab Material/、.DS_Store（改动需用户许可）
+├── docs/                         # 自己撰写的文档（会公开）
+│   └── Lab1_开题任务书.md        # Lab1 交付物：已完成，姓名/分工待用户填写
 ├── Archive/                      # 只读参考，见 §6
 │   ├── AircraftWar-base1.0/      # Swing 源码（自带独立 .git，remote=JEMUYAN/AircraftWar）
 │   └── 2024312380_廖梓承_实验报告.docx   # 个人实验报告，含个人信息
@@ -91,7 +94,9 @@ Archive 测试：`test/edu/hitsz/aircraft/HeroAircraftTest.java`（JUnit 5，仅
 
 **提交前检查**：`git status` 确认无上述敏感文件；Android 工程需有合适的 `.gitignore`（`build/`、`.gradle/`、`.idea/`、`local.properties`）——创建时征求用户意见。
 
-**Git 注意**：`Archive/AircraftWar-base1.0` 含嵌套 `.git`，`git add .` 会把它当 embedded repo/gitlink 处理。根仓库当前**仅有意提交 `AGENTS.md`**；之后只 `git add` 明确路径，不要 `git add .`/`-A`，直到用户决定 Archive 与课件如何处理（忽略 / 子模块 / 上传）。
+**Git 注意**：远程为 `https://github.com/JEMUYAN/AircraftWar-Android`（public，分支 `main`）。`Archive/`、`Lab Material/`、`.DS_Store` 已被根 `.gitignore` 忽略，不会入库；`Archive/AircraftWar-base1.0` 另有自己的 `.git`（remote 为 `JEMUYAN/AircraftWar`），与根仓库互不相干，不要动它。提交时仍优先 `git add` 明确路径，并检查 `git status`。
+- 公开文档（如 `docs/`）不得写学号等个人信息。
+- 本机 SSH 到 GitHub 不通；推送若失败，改用 HTTPS 或经 GitHub MCP，不要擅自改 git 全局配置。
 
 ## 7. Archive 已知粗糙点 → 新项目优化清单
 
@@ -184,3 +189,4 @@ java -cp "/tmp/aw-out:lib/*" edu.hitsz.application.Main     # 需要图形界面
 - 新增 Lab 时的模板：在 §1 表里更新状态；在对应章节补"本 Lab 引入的约束/模块/命令"；若 Lab 引入敏感数据（令牌、服务器地址、keystore），同步 §6。
 - 变更记录（追加在下方）：
   - 2026-11-24：初版（基于 Lab1–3 材料与 Archive 分析）。
+  - 2026-11-24：新增 `.gitignore`、`docs/Lab1_开题任务书.md`；创建 GitHub 远程仓库 AircraftWar-Android；更新 §1、§2、§6。
