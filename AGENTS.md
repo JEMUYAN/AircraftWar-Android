@@ -12,8 +12,8 @@
 | Lab | 主题 | 状态 |
 |---|---|---|
 | 1 | 任务书（模板 `Lab Material/Lab1/Opening Thesis Proposal Assignment.md`；成稿 `docs/Lab1_开题任务书.md`，规划网络功能：云端排行榜、双人联机对战） | 初稿完成（用户需填姓名/分工后提交） |
-| 2 | 迁移：空壳 → 资源 → SurfaceView 游戏循环 → 触屏与逻辑 | 材料已有 |
-| 3 | 难度选择页、Intent 跳转、MediaPlayer(BGM)/SoundPool(音效)、Handler、MVC | 材料已有 |
+| 2 | 迁移：空壳 → 资源 → SurfaceView 游戏循环 → 触屏与逻辑 | **已完成**（`AircraftWar2026/`，四步各一次提交；三种难度逻辑已迁入，`MainActivity` 固定启动 EASY） |
+| 3 | 难度选择页、Intent 跳转、MediaPlayer(BGM)/SoundPool(音效)、Handler、MVC | 材料已有，待做（可经 `GameEventListener` 接入音效与结束跳转） |
 | 4 | 排行榜与本地存储 | 待更新 |
 | 5 | 网络对战 | 待更新 |
 | 6 | 自选扩展功能 | 待更新 |
@@ -33,10 +33,26 @@ AircraftWar/                      # 根仓库（git init 于此）
 │   ├── AircraftWar-base1.0/      # Swing 源码（自带独立 .git，remote=JEMUYAN/AircraftWar）
 │   └── 2024312380_廖梓承_实验报告.docx   # 个人实验报告，含个人信息
 ├── Lab Material/                 # 课件与示例（只读）
-└── <Android 工程目录>            # 尚未创建；创建后在 §2 补充其路径
+└── AircraftWar2026/              # Android 工程（Gradle 根目录，命令在此执行）
+    └── app/src/{main,test}/java/edu/hitsz/aircraftwar2026/
 ```
 
-Android 工程尚未创建。创建时由用户在 Android Studio 新建（Empty Views Activity，Java，minSdk 30），或经用户同意由 agent 手写 Gradle 骨架。
+**Android 工程**（核实于 2026-11-24）：applicationId/namespace=`edu.hitsz.aircraftwar2026`，Java 11 源码级别，minSdk 30，compile/targetSdk 37，AGP 9.5.2，Gradle 9.6.0（wrapper），JUnit 4。竖屏锁定（`screenOrientation=portrait`）。
+
+```
+edu.hitsz.aircraftwar2026
+├── basic/     AbstractFlyingObject、ImageKey(枚举+原始像素尺寸)、Bounds、GameConfig(TICK_MS=40, WORLD_WIDTH=512)
+├── aircraft/  AbstractAircraft→HeroAircraft(非单例)/Mob/Elite/Superior/Ace/Boss；EnemyFactory + EnemyFactories
+├── bullet/    BaseBullet→HeroBullet/EnemyBullet
+├── shoot/     ShootStrategy：Direct/Spread/Fan/Circle/NoShoot
+├── prop/      BaseProp→Hp/Bomb/Power/SuperPower/Frozen；PropType、PropFactory、PropEventPublisher/Observer
+├── game/      GameEngine(逻辑帧)、GameWorld、Spawner、CollisionSystem、Difficulty(enum)、
+│              DifficultyRules→Easy/Normal/HardRules、DifficultyState、GameEventListener(默认空实现)
+├── view/      GameView(SurfaceView+线程)、Renderer、ImageRepository(平台层，唯一 import android.* 的包，另有 MainActivity)
+└── MainActivity
+```
+以上除 `view/` 与 `MainActivity` 外均为纯 Java（无 `android.*`），由 `app/src/test` 的 JVM 单测覆盖（`AircraftTest`、`GameEngineTest`，共 48 个）。
+关键约定：逻辑坐标宽度固定 512、高度按屏幕比例（`Bounds.fromScreen`），渲染按屏幕宽度等比缩放；游戏线程每 40ms 调用 `GameEngine.update()` 再绘制；触屏经 `GameEngine.setHeroTarget`（同步交接）；游戏线程事件经 `GameEventListener` 回调，UI 操作须由 Activity 经 `Handler(Looper.getMainLooper())` 切回主线程；图片经 `ImageRepository` 以 `inScaled=false` 一次性解码。
 
 ## 3. Archive 源码模块与依赖（`src/edu/hitsz/`）
 
@@ -104,15 +120,18 @@ Archive 测试：`test/edu/hitsz/aircraft/HeroAircraftTest.java`（JUnit 5，仅
 
 | # | 问题（证据） | 优化方向 |
 |---|---|---|
-| 1 | 冻结/道具效果/敌机状态用 `new Thread(sleep)`（`EliteEnemy/AceEnemy/SuperiorEnemy/EnemyBullet/PropEffectRunnable/HeroAircraft`）：线程泄漏、无法随暂停/退出停止、与帧循环不同步、线程安全隐患 | 统一为**基于游戏 tick/时间戳的计时器**（在游戏循环内倒计时），无额外线程 |
-| 2 | `AbstractGame` 约 450 行，混合状态、生成、碰撞、渲染、音频、Swing UI（上帝类） | 拆分：World/Engine（逻辑）、Spawner、CollisionSystem、Renderer、GameController；`AbstractGame` 的模板方法（难度参数）保留 |
-| 3 | `HeroAircraft` 单例带线程，且单测靠反射重置 | 去全局可变单例或提供 `reset()`；利于测试与重开局 |
-| 4 | 逻辑类依赖 `ImageManager`（BufferedImage、`src/images/...` 相对路径） | 逻辑层不依赖图像；尺寸由渲染层资源表提供 |
-| 5 | `AudioManager` 绑定 javax.sound、硬编码路径；Boss 用 `hasBoss` 等松散布尔状态 | 换 `music` 包封装；状态用枚举/小状态机 |
+| 1 ✅ | 冻结/道具效果/敌机状态用 `new Thread(sleep)`（`EliteEnemy/AceEnemy/SuperiorEnemy/EnemyBullet/PropEffectRunnable/HeroAircraft`）：线程泄漏、无法随暂停/退出停止、与帧循环不同步、线程安全隐患 | 统一为**基于游戏 tick/时间戳的计时器**（在游戏循环内倒计时），无额外线程 |
+| 2 ◐ | `AbstractGame` 约 450 行，混合状态、生成、碰撞、渲染、音频、Swing UI（上帝类） | 拆分：World/Engine（逻辑）、Spawner、CollisionSystem、Renderer、GameController；`AbstractGame` 的模板方法（难度参数）保留 |
+| 3 ✅ | `HeroAircraft` 单例带线程，且单测靠反射重置 | 去全局可变单例或提供 `reset()`；利于测试与重开局 |
+| 4 ✅ | 逻辑类依赖 `ImageManager`（BufferedImage、`src/images/...` 相对路径） | 逻辑层不依赖图像；尺寸由渲染层资源表提供 |
+| 5 ◐ | `AudioManager` 绑定 javax.sound、硬编码路径；Boss 用 `hasBoss` 等松散布尔状态 | 换 `music` 包封装；状态用枚举/小状态机 |
 | 6 | `ScoreDAOImpl` 相对路径写文件、`split(",")` 无容错（用户名含逗号或坏行即崩）、吞异常 `printStackTrace`、文件名难度字符串分支 | 私有目录存储、健壮解析、难度用 `enum`、错误走 `Log`/回调 |
-| 7 | 难度用字符串（"easy"/"medium"...）、魔法数字散落（60/100/40/20…） | `enum Difficulty` + 配置对象/常量 |
-| 8 | 测试覆盖极少（仅 `HeroAircraftTest`） | 逻辑层纯 Java，补 JUnit 单测（碰撞、射击策略、道具、计分、DAO 解析） |
-| 9 | `Main.WINDOW_WIDTH/HEIGHT` 固定 512×768 | 按 `surfaceChanged` 实际尺寸比例换算 |
+| 7 ✅ | 难度用字符串（"easy"/"medium"...）、魔法数字散落（60/100/40/20…） | `enum Difficulty` + 配置对象/常量 |
+| 8 ◐ | 测试覆盖极少（仅 `HeroAircraftTest`） | 逻辑层纯 Java，补 JUnit 单测（碰撞、射击策略、道具、计分、DAO 解析） |
+| 9 ✅ | `Main.WINDOW_WIDTH/HEIGHT` 固定 512×768 | 按 `surfaceChanged` 实际尺寸比例换算 |
+
+状态（2026-11-24）：✅ 已完成；◐ 部分完成——#2 逻辑已拆为 Engine/Spawner/CollisionSystem/Renderer，GameController 待 Lab3 的 Activity 分层；#5 Boss 状态已用 `GameWorld.BossState`，音频 `music` 包待 Lab3；#8 逻辑层已补单测，DAO 解析待 Lab4；#6 待 Lab4。
+迁移中有意保留的旧版行为（保持规则等价）：被冰冻的敌机仍会射击；一颗英雄子弹可同时击中重叠的多架敌机；英雄机撞敌机直接死亡。已偏离旧版（视为修复）：英雄-敌机碰撞每帧判定（旧版只在存在英雄子弹时判定）；道具飞出底部即清除；重复冰冻时重新计时（旧版以最早的线程为准）。
 
 保持行为等价的前提：优化不得改变游戏规则（分数、难度曲线、道具效果）——除非用户同意；对比基线为 Archive 行为。
 
@@ -126,7 +145,7 @@ Archive 测试：`test/edu/hitsz/aircraft/HeroAircraftTest.java`（JUnit 5，仅
 | Android SDK | `~/Library/Android/sdk`：`build-tools/36.0.0`、`platforms/`、`platform-tools/`、`emulator/`、`system-images/`、`licenses/`、`sources/` |
 | adb / emulator | **不在 PATH**；用绝对路径：`~/Library/Android/sdk/platform-tools/adb`、`~/Library/Android/sdk/emulator/emulator` |
 | AVD | `Medium_Phone_API_37.0` |
-| gradle | 无全局安装——**使用工程内 `./gradlew`**（工程创建后） |
+| gradle | 无全局安装——**使用工程内 `./gradlew`**（已验证，Gradle 9.6.0，首次需联网下载依赖） |
 | git | `/opt/homebrew/bin/git`；user `sagm` / `hitszllll06@outlook.com` |
 | gh CLI | **未安装**；GitHub 通过 MCP（`plugin-github-github`，账号 `JEMUYAN`）操作 |
 | GitHub SSH | 本机 `ssh -T git@github.com` 当前 **Permission denied (publickey)**；推送需 HTTPS+凭据或让用户修复 SSH |
@@ -139,7 +158,7 @@ export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # 与 AGP 兼容性更稳；也可用 openjdk@21
 ```
 
-### 常用命令（Android 工程创建后；在其根目录执行）
+### 常用命令（在 `AircraftWar2026/` 下执行；2026-11-24 已验证标 ✔）
 ```bash
 ./gradlew assembleDebug                  # 构建 debug APK
 ./gradlew testDebugUnitTest              # JVM 单元测试（逻辑层）
@@ -154,7 +173,9 @@ adb logcat -v time | grep -E "FATAL EXCEPTION|<TAG>"     # 崩溃先找 FATAL EX
 adb shell pidof <applicationId>
 adb exec-out screencap -p > /tmp/screen.png              # 截图验证 UI
 ```
-> 以上命令在 Android 工程创建并成功构建后才算"已验证"；首次验证后请把实际可用版本回写本节。
+> 已验证：`./gradlew assembleDebug testDebugUnitTest lintDebug` ✔（需 `JAVA_HOME` 指向 Android Studio JBR，`ANDROID_HOME` 如上，沙箱内需联网/放开权限）；`adb install -r`、`adb shell am start -n edu.hitsz.aircraftwar2026/.MainActivity`、`adb exec-out screencap -p`、`adb shell input swipe`、`adb logcat -d -s GameView:D MainActivity:I AndroidRuntime:E` ✔。未验证：`connectedDebugAndroidTest`。
+> 注意：`emulator` 必须在**持久的后台 shell** 中启动（短命令结束会连带杀死模拟器）；`adb wait-for-device` 在无设备时会一直阻塞，勿放进前台命令。用户通常已在 Android Studio 开着 `Medium_Phone_API_37.0`（`adb devices` 里为 `emulator-5554`）。
+> 已知无害日志：游戏页退出/重启（含 Android Studio 点 Run）时 logcat 会出现 `BufferQueueProducer: disconnect: not connected (req=2)` 与 `Surface: failed to disconnect ... Error -19 (NO_INIT)`。已在 API 37 模拟器复现，出现在游戏线程已 join 退出之后，由系统在 Surface 销毁时重复断开所致，不影响功能；改用 `lockHardwareCanvas` 反而产生更多错误日志，故保持 `lockCanvas`。若出现 FATAL EXCEPTION 或游戏线程未退出才需排查。
 
 ### 运行旧版 Java 版（仅作行为基线，勿在 Archive 内生成产物）
 Archive 的 IDE 工程是 IntelliJ（`.iml`，JDK11，JUnit 5.14，`lib/commons-lang3-3.8.1.jar`）。资源按**工作目录相对路径**加载（`src/images/...`），需在 Archive 内部目录为工作目录运行。若要运行：复制到 `/tmp/aw-base` 后编译：
@@ -163,11 +184,11 @@ cp -R Archive/AircraftWar-base1.0 /tmp/aw-base && cd /tmp/aw-base
 mkdir -p /tmp/aw-out && javac -encoding UTF-8 -cp "lib/*" -d /tmp/aw-out $(find src -name '*.java')
 java -cp "/tmp/aw-out:lib/*" edu.hitsz.application.Main     # 需要图形界面
 ```
-（未在本机实测；成功/失败后请更新。）
+（未在本机实测；Android 版已可作为行为对照，数值以 `game/*Rules.java` 与 Archive 对照。）
 
 ## 9. 分工：agent 能做 vs 需用户在 Android Studio 操作
 
-**agent 可独立完成：** 读/改 Java、XML、Gradle 脚本、Manifest；命令行构建/单测/lint（`./gradlew`）；用 `adb`/`emulator` 启动模拟器、安装、启动、抓 logcat、截图；git 提交；用 GitHub MCP 操作仓库；阅读课件/文档并整理。
+**agent 可独立完成（已实际做过：构建、单测、lint、模拟器安装/启动/滑动/截图/logcat）：** 读/改 Java、XML、Gradle 脚本、Manifest；命令行构建/单测/lint（`./gradlew`）；用 `adb`/`emulator` 启动模拟器、安装、启动、抓 logcat、截图；git 提交；用 GitHub MCP 操作仓库；阅读课件/文档并整理。
 
 **需要用户（Android Studio GUI 或本机授权）：**
 - 首次创建工程（New Project → Empty Views Activity，Java，minSdk 30，项目名/路径）、Gradle Sync、SDK/AGP/Gradle 升级与许可确认、下载 system image。
@@ -190,3 +211,4 @@ java -cp "/tmp/aw-out:lib/*" edu.hitsz.application.Main     # 需要图形界面
 - 变更记录（追加在下方）：
   - 2026-11-24：初版（基于 Lab1–3 材料与 Archive 分析）。
   - 2026-11-24：新增 `.gitignore`、`docs/Lab1_开题任务书.md`；创建 GitHub 远程仓库 AircraftWar-Android；更新 §1、§2、§6。
+  - 2026-11-24：Lab2 完成：创建 `AircraftWar2026/`，迁移逻辑并落实 §7 多项优化；更新 §1、§2（工程结构）、§7（状态）、§8（已验证命令、无害日志）。
